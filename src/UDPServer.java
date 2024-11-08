@@ -49,6 +49,7 @@ class UDPServer {
 
         } else {
             // Path to no
+            // send message to an IP
 
         }
 
@@ -59,7 +60,7 @@ class UDPServer {
         
 
         // Mensage recieve and added as route =======================================
-        String mensageRecieved = messageToSend;
+        String mensageRecieved = "";
         String[] mensage = mensageRecieved.split("!");
         System.out.println("Mensage to recieved: ");
         
@@ -112,6 +113,9 @@ class UDPServer {
         } else if (command.startsWith("@")) {
             addIPToRoutingTable(routingTable, command, address, port, socket);
 
+        } else if (command.startsWith("&")) {
+            sendMessage(routingTable, socket);
+
         } else {
             System.out.println("Unknow command!");
         }
@@ -140,7 +144,7 @@ class UDPServer {
         System.out.println("New route added: " + message);
     }
 
-    private static void sendMessage(ArrayList<Route> routingTable, DatagramSocket socket) throws IOException {
+    private static void sendRoutingTable(ArrayList<Route> routingTable, DatagramSocket socket) throws IOException {
     // (String nickname, String message, InetAddress senderAddress, int senderPort, DatagramSocket socket) throws IOException {
         // It will (re)create the message with the routing table to send
         String messageToSend = "";
