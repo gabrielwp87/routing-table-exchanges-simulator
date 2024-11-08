@@ -11,53 +11,55 @@ class UDPServer {
     private static Map<String, Integer> clientPorts = new HashMap<>();
 
     public static void main(String args[]) throws Exception {
+        // default port, as asked
+        int port = 19000;
 
-        int port;
-        if (args.length < 1) {  // default port as asked
-            port = 19000;
-        } else {
-            port = Integer.parseInt(args[0]);
-        }
+        String file = "src\\roteadores.txt";
 
         // create a list that will keep the routes, forming a routing table
         ArrayList<Route> routingTable = new ArrayList<Route>();
 
-        // read the roteadores.txt file and create the initial rounting table
-        try {
-            File roteadores = new File("src\\roteadores.txt");
-            Scanner myReader = new Scanner(roteadores);
-            while (myReader.hasNextLine()) {
-                String data = myReader.nextLine();
-                Route route = new Route(data, 1, data);
-                routingTable.add(route);
+        // Question the user if a new net will be created (YES case) or if there is a net (case no) and need to connect
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.println("Construir uma rede nova? (responda com 'sim' ou 'não')");
+        String answer = scanner.nextLine().trim().toLowerCase();
+
+        if (answer.equals("sim") || answer.equals("s") || answer.equals("yes") || answer.equals("y")) {
+            // Path to yes
+            // read the roteadores.txt file and create the initial rounting table
+            try {
+                File roteadores = new File(file);
+                Scanner myReader = new Scanner(roteadores);
+                while (myReader.hasNextLine()) {
+                    String data = myReader.nextLine();
+                    Route route = new Route(data, 1, data);
+                    routingTable.add(route);
+                }
+                myReader.close();
+            } catch (FileNotFoundException e) {
+                System.out.println("An error occurred.");
+                e.printStackTrace();
             }
-            myReader.close();
-        } catch (FileNotFoundException e) {
-            System.out.println("An error occurred.");
-            e.printStackTrace();
+
+            for (Route route : routingTable) {
+                System.out.println("Initial table: ");
+                System.out.println(route.getIpDestiny() + " " + route.getMetric() + " " + route.getIpOut());
+            }
+
+        } else {
+            // Path to no
+
         }
 
-        for (Route route : routingTable) {
-            System.out.println("Initial table: ");
-            System.out.println(route.getIpDestiny() + " " + route.getMetric() + " " + route.getIpOut());
-        }
+        scanner.close();
 
 
-        // Mensage to send =======================================
-        String mensageToSend = "";
-        System.out.println("Initial table: ");
 
-        for (Route route : routingTable) {
-            mensageToSend += "!"+route.getIpDestiny() + ":" + route.getMetric();
-        }
         
-        System.out.println();
-        System.out.println("Mensage to send: ");
-        System.out.println(mensageToSend);
-        System.out.println();
 
         // Mensage recieve and added as route =======================================
-        String mensageRecieved = mensageToSend;
+        String mensageRecieved = messageToSend;
         String[] mensage = mensageRecieved.split("!");
         System.out.println("Mensage to recieved: ");
         
@@ -79,108 +81,92 @@ class UDPServer {
                 }
             }
         }
+
+
+        DatagramSocket serverSocket = new DatagramSocket(port);
+
+        while (true) {
+            byte[] receiveData = new byte[1024];
+            DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+            serverSocket.receive(receivePacket);
+
+            String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
+            InetAddress clientIpAddress = receivePacket.getAddress();
+            int clientPort = receivePacket.getPort();
+
+            // TODO: put the 15 seconds wait to it
+            sendMessage(routingTable, serverSocket);
+
+            /* 
+            clienteIpAddress is the IP address from who sent the message
+             */
+            handleCommand(routingTable, receivedMessage, clientIpAddress, clientPort, serverSocket);
+        }
     }
 
 
-    //     DatagramSocket serverSocket = new DatagramSocket(port);
+    private static void handleCommand(ArrayList<Route> routingTable, String command, InetAddress address, int port, DatagramSocket socket) throws IOException {
+        if(command.startsWith("!")) {
+            registerRoutingTable(routingTable, command, address, port, socket);
+       
+        } else if (command.startsWith("@")) {
+            addIPToRoutingTable(routingTable, command, address, port, socket);
 
-    //     while (true) {
-    //         byte[] receiveData = new byte[1024];
-    //         DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-    //         serverSocket.receive(receivePacket);
+        } else {
+            System.out.println("Unknow command!");
+        }
+    }
 
-    //         String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
-    //         InetAddress clientAddress = receivePacket.getAddress();
-    //         int clientPort = receivePacket.getPort();
+    // TODO: registeRoutingTable logic
+    private static void registerRoutingTable(String message, InetAddress address, int metric) {
+        // clients.put(nickname, address);
+        // clientPorts.put(nickname, port);
 
-    //         handleCommand(receivedMessage, clientAddress, clientPort, serverSocket);
-    //     }
-    // }
 
-    // private static void handleCommand(String command, InetAddress address, int port, DatagramSocket socket) throws IOException {
-    //     String[] parts = command.split(" ", 4);
-    //     String action = parts[0];
 
-    //     switch (action.toUpperCase()) {
-    //         case "/FILE":
-    //             String targetNickname = parts[1];
-    //             String fileName = parts[2];
-    //             long fileSize = Long.parseLong(parts[3]);
+        System.out.println("Message recieved: " + message);
+    }
 
-    //             if (clients.containsKey(targetNickname)) {
-    //                 InetAddress receiverAddress = clients.get(targetNickname);
-    //                 int receiverPort = clientPorts.get(targetNickname);
+    private static void addIPToRoutingTable(ArrayList<Route> routingTable, command, address, port, socket) {
 
-    //                 // Informar o cliente destino sobre o arquivo que será recebido
-    //                 String fileInfo = "/FILEINFO " + targetNickname + " " + fileName + " " + fileSize;
-    //                 byte[] fileInfoData = fileInfo.getBytes();
-    //                 DatagramPacket fileInfoPacket = new DatagramPacket(fileInfoData, fileInfoData.length, receiverAddress, receiverPort);
-    //                 socket.send(fileInfoPacket);
 
-    //                 // Agora o servidor vai receber e repassar os blocos de dados binários
-    //                 transferFile(socket, address, port, receiverAddress, receiverPort);
-    //             } else {
-    //                 System.out.println("Usuário não encontrado: " + targetNickname);
-    //             }
-    //             break;
-    //         case "/REG":
-    //             registerUser(parts[1], address, port);
-    //             break;
-    //         case "/MSG":
-    //             sendMessage(parts[1], parts[2], address, port, socket);
-    //             break;
-    //         case "/QUIT":
-    //             unregisterUser(address, port);
-    //             break;
-    //         default:
-    //             System.out.println("Comando desconhecido.");
-    //     }
-    // }
+        for (Route route : routingTable) {
+            if(route.getIpDestiny().equals(ip) && metricInt < route.getMetric()) {
+                route.UpdateRoute(metricInt, newIpOut);
+                break;
+            }
+        }
 
-    // // Função para repassar os dados binários do arquivo do cliente origem para o cliente destino
-    // private static void transferFile(DatagramSocket socket, InetAddress senderAddress, int senderPort, InetAddress receiverAddress, int receiverPort) throws IOException {
-    //     byte[] buffer = new byte[1024];
-    //     DatagramPacket filePacket;
+        System.out.println("New route added: " + message);
+    }
 
-    //     while (true) {
-    //         filePacket = new DatagramPacket(buffer, buffer.length);
-    //         socket.receive(filePacket);  // Recebe o bloco do cliente origem
+    private static void sendMessage(ArrayList<Route> routingTable, DatagramSocket socket) throws IOException {
+    // (String nickname, String message, InetAddress senderAddress, int senderPort, DatagramSocket socket) throws IOException {
+        // It will (re)create the message with the routing table to send
+        String messageToSend = "";
+        for (Route route : routingTable) {
+            messageToSend += "!" + route.getIpDestiny() + ":" + route.getMetric();
+        }
 
-    //         if (!filePacket.getAddress().equals(senderAddress) || filePacket.getPort() != senderPort) {
-    //             continue;
-    //         }
+        // It will send the message only to the neighboors routers
+        for (Route route : routingTable) {
+            if (route.getMetric() == 1) {
+                byte[] sendData = messageToSend.getBytes();
+                InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
+                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, 19000);
+                socket.send(sendPacket);
+            }
+        }
 
-    //         DatagramPacket forwardPacket = new DatagramPacket(filePacket.getData(), filePacket.getLength(), receiverAddress, receiverPort);
-    //         socket.send(forwardPacket);
+        // Test Mensage to send =======================================
+        // System.out.println("Initial table: ");
+        // System.out.println();
+        // System.out.println("Mensage to send: ");
+        // System.out.println(messageToSend);
+        // System.out.println();
+    }
 
-    //         if (filePacket.getLength() < 1024) {
-    //             break;
-    //         }
-    //     }
-
-    //     System.out.println("Transferência de arquivo concluída.");
-    // }
-
-    // private static void registerUser(String nickname, InetAddress address, int port) {
-    //     clients.put(nickname, address);
-    //     clientPorts.put(nickname, port);
-    //     System.out.println("Usuário registrado: " + nickname);
-    // }
-
-    // private static void sendMessage(String nickname, String message, InetAddress senderAddress, int senderPort, DatagramSocket socket) throws IOException {
-    //     if (clients.containsKey(nickname)) {
-    //         InetAddress receiverAddress = clients.get(nickname);
-    //         int receiverPort = clientPorts.get(nickname);
-    //         String fullMessage = "Mensagem de " + senderAddress.getHostAddress() + ": " + message;
-    //         byte[] sendData = fullMessage.getBytes();
-    //         DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, receiverAddress, receiverPort);
-    //         socket.send(sendPacket);
-    //     } else {
-    //         System.out.println("Usuário não encontrado: " + nickname);
-    //     }
-    // }
-
-    // private static void unregisterUser(InetAddress address, int port) {
-    //     // Implementar lógica para remover usuário registrado
-    // }
+    private static void unregisterUser(InetAddress address, int port) {
+        // Implementar lógica para remover usuário registrado
+    }
 }
