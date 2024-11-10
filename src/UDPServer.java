@@ -16,13 +16,21 @@ class UDPServer {
 
         String file = "src\\roteadores.txt";
 
+        // get local IP
+        InetAddress localIp = InetAddress.getLocalHost();
+
+        // convert IP address to string
+        String myIP = localIp.getHostAddress();
+
         // create a list that will keep the routes, forming a routing table
         ArrayList<Route> routingTable = new ArrayList<Route>();
+
+        DatagramSocket serverSocket = new DatagramSocket(port);
 
         // Question the user if a new net will be created (YES case) or if there is a net (case no) and need to connect
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("Construir uma rede nova? (responda com 'sim' ou 'não')");
+        System.out.println("Create a new network? (answer with 'yes' or 'no')");
         String answer = scanner.nextLine().trim().toLowerCase();
 
         if (answer.equals("sim") || answer.equals("s") || answer.equals("yes") || answer.equals("y")) {
@@ -42,49 +50,28 @@ class UDPServer {
                 e.printStackTrace();
             }
 
+            System.out.println("Initial table: ");
             for (Route route : routingTable) {
-                System.out.println("Initial table: ");
                 System.out.println(route.getIpDestiny() + " " + route.getMetric() + " " + route.getIpOut());
             }
 
         } else {
-            // Path to no
+            // Path to no --- THERE IS A NETWORK
             // send message to an IP
 
-        }
+            System.out.println("Enter target's IP: ");
+            String answerIP = scanner.nextLine().trim();
+            String messageToSend = "@" + myIP;
 
+            byte[] sendData = messageToSend.getBytes();
+            InetAddress ipDestiny = InetAddress.getByName(answerIP);
+            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, 19000);
+            serverSocket.send(sendPacket);
+
+        }
         scanner.close();
 
-
-
-        
-
-        // Mensage recieve and added as route =======================================
-        String mensageRecieved = "";
-        String[] mensage = mensageRecieved.split("!");
-        System.out.println("Mensage to recieved: ");
-        
-        for (String s : mensage) {
-            if (s.length() > 0) {
-                System.out.println(s);
-                String ip = s.substring(0, s.length() - 2);
-                String metric = s.substring(s.length() - 1, s.length());
-                
-                int metricInt = Integer.parseInt(metric);
-                
-                // TODO: newIpOut must be correct to the ip that send the mensage it recieves
-                String newIpOut = "192.168.1.200";
-                for (Route route : routingTable) {
-                    if(route.getIpDestiny().equals(ip) && metricInt < route.getMetric()) {
-                        route.UpdateRoute(metricInt, newIpOut);
-                        break;
-                    }
-                }
-            }
-        }
-
-
-        DatagramSocket serverSocket = new DatagramSocket(port);
+        String senderIpAddress;
 
         while (true) {
             byte[] receiveData = new byte[1024];
@@ -92,65 +79,110 @@ class UDPServer {
             serverSocket.receive(receivePacket);
 
             String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
-            InetAddress clientIpAddress = receivePacket.getAddress();
-            int clientPort = receivePacket.getPort();
+            InetAddress IpAddress = receivePacket.getAddress();
+            senderIpAddress = IpAddress.getHostAddress();
+            
+            // it shoulnd not be needed, but let it here!!!
+            // int clientPort = receivePacket.getPort();
 
             // TODO: put the 15 seconds wait to it
-            sendMessage(routingTable, serverSocket);
+            // sendMessage(routingTable, message, socket, myIP);
 
-            /* 
-            clienteIpAddress is the IP address from who sent the message
+            /*
+            senderIpAddress is the IP address from who sent the message
              */
-            handleCommand(routingTable, receivedMessage, clientIpAddress, clientPort, serverSocket);
+            handleCommunication(routingTable, receivedMessage.trim(), senderIpAddress, serverSocket, myIP);
         }
     }
 
 
-    private static void handleCommand(ArrayList<Route> routingTable, String command, InetAddress address, int port, DatagramSocket socket) throws IOException {
-        if(command.startsWith("!")) {
-            registerRoutingTable(routingTable, command, address, port, socket);
-       
-        } else if (command.startsWith("@")) {
-            addIPToRoutingTable(routingTable, command, address, port, socket);
+    private static void handleCommunication(ArrayList<Route> routingTable, String message, String senderIpAddress, DatagramSocket socket, String myIP) throws IOException {
 
-        } else if (command.startsWith("&")) {
-            sendMessage(routingTable, socket);
-
-        } else {
-            System.out.println("Unknow command!");
-        }
-    }
-
-    // TODO: registeRoutingTable logic
-    private static void registerRoutingTable(String message, InetAddress address, int metric) {
-        // clients.put(nickname, address);
-        // clientPorts.put(nickname, port);
-
-
-
-        System.out.println("Message recieved: " + message);
-    }
-
-    private static void addIPToRoutingTable(ArrayList<Route> routingTable, command, address, port, socket) {
-
-
-        for (Route route : routingTable) {
-            if(route.getIpDestiny().equals(ip) && metricInt < route.getMetric()) {
-                route.UpdateRoute(metricInt, newIpOut);
+         switch (message.charAt(0)) {
+            case '!':
+                registerInRoutingTable(routingTable, message, senderIpAddress, socket);
                 break;
+            case '@':  // message to enter in a network (that already exist)
+                addIPToRoutingTable(routingTable, message, senderIpAddress, socket);
+                break;
+            case '&':
+                recieveMessage(routingTable, message, socket, myIP);
+                break;
+
+            default:
+                System.out.println("Unknown message!");
+        }
+    }
+
+    private static void registerInRoutingTable(ArrayList<Route> routingTable, String message, String senderIpAddress, DatagramSocket socket) {
+        // case message starts with '!'
+        String[] mensageRecieved = message.split("!");
+        // System.out.println("Mensage to recieved: ");
+        
+        // !192.168.1.2:1!192.168.1.3:1
+        for (String s : mensageRecieved) {
+            if (s.length() > 0) {
+                System.out.println(s);
+                String[] parts = s.split(":");
+                String ip = parts[0];
+                String metric = parts[1];
+
+                int metricInt = Integer.parseInt(metric) + 1;
+
+                boolean found = false;
+
+                String newIpOut = senderIpAddress;
+
+                for (Route route : routingTable) {  // iterate the existing routing table
+                    if(route.getIpDestiny().equals(ip)) {  // find if the ip is already in the routing table
+                        found = true;
+                        if(metricInt < route.getMetric()) {
+                            route.UpdateRoute(metricInt, newIpOut);  // if the ip has a smaller metric it updates the routing table
+                        }
+                        break;
+                    }
+                }
+
+                // as the ip wasn't in the routing table it will be added to it
+                if(!found) {
+                    Route newRoute = new Route(ip, metricInt, newIpOut);
+                    routingTable.add(newRoute);
+                }
             }
         }
 
-        System.out.println("New route added: " + message);
+        System.out.println("Current Routing Table: ");
+        for (Route route : routingTable) {
+            System.out.println(route.getIpDestiny() + " " + route.getMetric() + " " + route.getIpOut());
+        }
     }
 
-    private static void sendRoutingTable(ArrayList<Route> routingTable, DatagramSocket socket) throws IOException {
+    private static void addIPToRoutingTable(ArrayList<Route> routingTable, String message, String senderIpAddress, DatagramSocket socket) {
+        // case message starts with '@'
+        String ip = message.substring(1);
+        
+        // TODO: confirm if the message is real or not, the message send an IP (ex.: @192.168.1.1) and the address has it's IP
+        if(ip.equals(senderIpAddress)) {
+            Route newRoute = new Route(ip, 1, senderIpAddress);
+            routingTable.add(newRoute);
+
+            System.out.println("New route added: " + message);
+            System.out.println(newRoute.getIpDestiny() + " " + newRoute.getMetric() + " " + newRoute.getIpOut());
+
+        } else {
+            System.out.println("IP is different from ip source, addicion to routing table not accepted!");
+        }
+
+    }
+
+    private static void sendRoutingTable(ArrayList<Route> routingTable, DatagramSocket socket, String myIP) throws IOException {
     // (String nickname, String message, InetAddress senderAddress, int senderPort, DatagramSocket socket) throws IOException {
         // It will (re)create the message with the routing table to send
-        String messageToSend = "";
+        String messageToSend = "!" + myIP + "1";
         for (Route route : routingTable) {
             messageToSend += "!" + route.getIpDestiny() + ":" + route.getMetric();
         }
+
 
         // It will send the message only to the neighboors routers
         for (Route route : routingTable) {
@@ -170,7 +202,42 @@ class UDPServer {
         // System.out.println();
     }
 
-    private static void unregisterUser(InetAddress address, int port) {
-        // Implementar lógica para remover usuário registrado
+    private static void recieveMessage(ArrayList<Route> routingTable, String message, DatagramSocket socket, String myIP) throws IOException {
+        // &192.168.1.2%192.168.1.1%Oi tudo bem?
+        // O primeiro endereço é o IP da origem, o segundo é o IP de destino e a seguir vem a mensagem de texto.
+        
+        String mensageRecieved = message.substring(1);
+        String[] parts = mensageRecieved.split("%");
+
+        String ipDestiny = parts[0];
+
+        if(parts[1].equals(myIP)) {
+            System.out.println(parts[2]);
+            return;
+        }
+
+        boolean found = false;
+
+        for (Route route : routingTable) {  // iterate the existing routing table
+            if(route.getIpDestiny().equals(ipDestiny)) {
+                found = true;        
+                String sendTo = route.getIpOut();  // get the ip out to know to who it needs to repass the message
+
+                byte[] sendData = message.getBytes();
+                InetAddress IpOut = InetAddress.getByName(sendTo);
+                DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IpOut, 19000);
+                socket.send(sendPacket);
+                break;
+            }
+        }
+        if(found) {
+            System.out.println("Message recieved and sent: " + message);
+        } else {
+            System.out.println("Route not found!");
+        }
+    }
+
+    // TODO
+    private static void removeRoute(String senderIpAddress) {
     }
 }
