@@ -9,17 +9,16 @@ import src.Route;
 import src.UDPClient.MessageReceiver;
 
 class UDPServer {
-    private static final int DEST_PORT = 19000; // Porta do destinatário
+    private static final int DEST_PORT = 19000; // Recipient port, default port
 
     private static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static ArrayList<Route> routingTable = new ArrayList<Route>();
 
-    // Objetos de bloqueio para `routingTable` e `rotaTasks`
+    // Blocking objects for `routingTable` abd `rotaTasks`
     private static final Object routingTableLock = new Object();
 
-    public static void main(String args[]) throws Exception {
-        // default port, as asked
 
+    public static void main(String args[]) throws Exception {
         String file = "src\\roteadores.txt";
 
         // get local IP
@@ -49,7 +48,7 @@ class UDPServer {
                     Route route = new Route(data, 1, data);
                     routingTable.add(route);
                 }
-                addRoutesTask(serverSocket, myIP); // Adiciona as tarefa para a rota
+                addRoutesTask(serverSocket, myIP); // Add tasks to a route
 
                 myReader.close();
             } catch (FileNotFoundException e) {
@@ -81,28 +80,30 @@ class UDPServer {
         // // Schedule tasks
         scheduleRemoveInactiveRouters();
 
-        // Thread para receber mensagens
+        // Thread to recieve messages
         // new Thread(new MessageReceiver(scanner, serverSocket, localIp, port)).start();
 
         String senderIpAddress;
 
-        // Thread para enviar mensagens
+        // Thread to send messages
         Thread sendThread = new Thread(() -> {
-            Scanner localScanner = new Scanner(System.in);
+            // @SuppressWarnings("resource")
             while (true) {
+                Scanner localScanner = new Scanner(System.in);
                 synchronized (routingTableLock) {
                     for (Route route : routingTable) {
                         System.out.println(route);
                     }
                 }
-                System.out.print("Digite sua mensagem:");
+                System.out.print("Type your message: ");
                 String message = localScanner.nextLine();
-                System.out.print("Digite o IP de destino: ");
+                System.out.print("Type the destiny's IP: ");
                 String routeDest = localScanner.nextLine();
+                localScanner.close();
                 try {
                     sendMessage(message, serverSocket, myIP, routeDest);
                 } catch (IOException e) {
-                    System.out.println("Erro ao enviar mensagem: " + e.getMessage());
+                    System.out.println("Error sending message: " + e.getMessage());
                 }
             }
         });
@@ -117,18 +118,11 @@ class UDPServer {
             InetAddress IpAddress = receivePacket.getAddress();
             senderIpAddress = IpAddress.getHostAddress();
 
-            // it shoulnd not be needed, but let it here!!!
-            // int clientPort = receivePacket.getPort();
-
-            // TODO: put the 15 seconds wait to it
-            // sendMessage(routingTable, message, socket, myIP);
-
-            /*
-             * senderIpAddress is the IP address from who sent the message
-             */
+            // senderIpAddress is the IP address from who sent the message
             handleCommunication(receivedMessage.trim(), senderIpAddress, serverSocket, myIP);
         }
     }
+
 
     private static void sendMessage(String message, DatagramSocket socket, String myIP, String routeDest) throws IOException {
         // &192.168.1.2%192.168.1.1%Oi tudo bem?
@@ -139,15 +133,17 @@ class UDPServer {
         DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
         try {
             socket.send(sendPacket);
-            System.out.println("Mensagem enviada: " + message);
+            System.out.println("Message sent: " + message);
         } catch (IOException e) {
-            System.out.println("Erro ao enviar mensagem: " + e.getMessage());
+            System.out.println("Error sending message: " + e.getMessage());
         }
     }
+
 
     private static void scheduleRemoveInactiveRouters() {
         scheduler.scheduleAtFixedRate(() -> removeInactiveRouters(), 0, 35, TimeUnit.SECONDS);
     }
+
 
     private static void handleCommunication(String message, String senderIpAddress, DatagramSocket socket, String myIP)
             throws IOException {
@@ -167,6 +163,7 @@ class UDPServer {
                 System.out.println("Unknown message!");
         }
     }
+
 
     private static void registerInRoutingTable(String message, String senderIpAddress, DatagramSocket socket) {
         // case message starts with '!'
@@ -212,11 +209,12 @@ class UDPServer {
         }
     }
 
+
     private static void addIPToRoutingTable(String message, String senderIpAddress, DatagramSocket socket) {
         // case message starts with '@'
         String ip = message.substring(1);
 
-        // TODO: confirm if the message is real or not, the message send an IP (ex.:
+        // confirm if the message is real or not, the message send an IP (ex.:
         // @192.168.1.1) and the address has it's IP
         if (ip.equals(senderIpAddress)) {
             Route newRoute = new Route(ip, 1, senderIpAddress);
@@ -228,8 +226,8 @@ class UDPServer {
         } else {
             System.out.println("IP is different from ip source, addicion to routing table not accepted!");
         }
-
     }
+
 
     private static void sendRoutingTable(DatagramSocket socket, String myIP) throws IOException {
         // (String nickname, String message, InetAddress senderAddress, int senderPort,
@@ -253,7 +251,6 @@ class UDPServer {
 
             }
         }
-
         // Test Mensage to send =======================================
         // System.out.println("Initial table: ");
         // System.out.println();
@@ -262,10 +259,11 @@ class UDPServer {
         // System.out.println();
     }
 
+
     private static void recieveMessage(String message, DatagramSocket socket, String myIP) throws IOException {
         // &192.168.1.2%192.168.1.1%Oi tudo bem?
-        // O primeiro endereço é o IP da origem, o segundo é o IP de destino e a seguir
-        // vem a mensagem de texto.
+        // The first address is the source IP, the second is the destination IP and then
+        // the text message comes.
 
         String mensageRecieved = message.substring(1);
         String[] parts = mensageRecieved.split("%");
@@ -279,10 +277,10 @@ class UDPServer {
 
         boolean found = false;
 
-        for (Route route : routingTable) { // iterate the existing routing table
+        for (Route route : routingTable) {  // iterate the existing routing table
             if (route.getIpDestiny().equals(ipDestiny)) {
                 found = true;
-                String sendTo = route.getIpOut(); // get the ip out to know to who it needs to repass the message
+                String sendTo = route.getIpOut();  // get the ip out to know to who it needs to repass the message
 
                 byte[] sendData = message.getBytes();
                 InetAddress IpOut = InetAddress.getByName(sendTo);
@@ -297,6 +295,7 @@ class UDPServer {
             System.out.println("Route not found!");
         }
     }
+
 
     private static void removeInactiveRouters() {
         long currentTime = System.currentTimeMillis();
@@ -313,7 +312,7 @@ class UDPServer {
 
 
     private static void addRoutesTask(DatagramSocket socket, String myIP) {
-        // Adiciona uma nova tarefa para enviar a tabela de roteamento para a nova rota
+        // Add a new task to send the routing table for the new route
         ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> {
             try {
                 sendRoutingTable(socket, myIP);
@@ -321,11 +320,6 @@ class UDPServer {
                 System.out.println("Error sending routing table: " + e.getMessage());
             }
         }, 0, 15, TimeUnit.SECONDS);
-        System.out.println("Nova tarefa para a rota adicionada.");
+        System.out.println("New task for added route.");
     }
-
-
-
-    
-
 }
