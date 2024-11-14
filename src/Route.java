@@ -40,4 +40,9 @@ public class Route {
         updateLastSeen(); // Atualiza o lastSeen quando a rota é modificada
     }
 
+    @Override
+    public String toString() {
+        
+        return this.getIpDestiny() + " " + this.getMetric() + " " + this.getIpOut();
+    }
 }

@@ -8,6 +8,8 @@ import java.util.concurrent.*;
 import src.Route;
 import src.UDPClient.MessageReceiver;
 
+
+
 class UDPServer {
     private static final int DEST_PORT = 19000; // Recipient port, default port
 
@@ -17,117 +19,114 @@ class UDPServer {
     // Blocking objects for `routingTable` abd `rotaTasks`
     private static final Object routingTableLock = new Object();
 
+    private static String myIP;
+
 
     public static void main(String args[]) throws Exception {
         String file = "src\\roteadores.txt";
-
+        
+        if (System.getProperty("os.name").equals("Linux")) file = "src/roteadores.txt";
+    
         // get local IP
         InetAddress localIp = InetAddress.getLocalHost();
-
+    
         // convert IP address to string
-        String myIP = localIp.getHostAddress();
-
+        myIP = localIp.getHostAddress();
+    
         DatagramSocket serverSocket = new DatagramSocket(DEST_PORT);
-
+    
         // Question the user if a new net will be created (YES case) or if there is a
         // net (case no) and need to connect
-        Scanner scanner = new Scanner(System.in);
-
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+    
         System.out.println("Create a new network? (answer with 'yes' or 'no')");
-        String answer = scanner.nextLine().trim().toLowerCase();
-
+        String answer = reader.readLine().trim().toLowerCase();
+    
         if (answer.equals("sim") || answer.equals("s") || answer.equals("yes") || answer.equals("y")) {
             // Path to yes
             // read the roteadores.txt file and create the initial rounting table
-            try {
-                File roteadores = new File(file);
-                Scanner myReader = new Scanner(roteadores);
-
-                while (myReader.hasNextLine()) {
-                    String data = myReader.nextLine();
-                    Route route = new Route(data, 1, data);
+    
+            String line;
+            try (BufferedReader myReader = new BufferedReader(new FileReader(file))) {
+                while ((line = myReader.readLine()) != null) {
+                    Route route = new Route(line, 1, line);
                     routingTable.add(route);
                 }
-                addRoutesTask(serverSocket, myIP); // Add tasks to a route
-
-                myReader.close();
             } catch (FileNotFoundException e) {
                 System.out.println("An error occurred.");
                 e.printStackTrace();
             }
-
+    
+            addRoutesTask(serverSocket); // Add tasks to a route
+    
             System.out.println("Initial table: ");
             for (Route route : routingTable) {
                 System.out.println(route.getIpDestiny() + " " + route.getMetric() + " " + route.getIpOut());
             }
-
+    
         } else {
             // Path to no --- THERE IS A NETWORK
             // send message to an IP
-
             System.out.println("Enter target's IP: ");
-            String answerIP = scanner.nextLine().trim();
-            String messageToSend = "@" + myIP;
-
+            String answerIP = reader.readLine().trim();
+            String messageToSend = "@" + answerIP;
             byte[] sendData = messageToSend.getBytes();
             InetAddress ipDestiny = InetAddress.getByName(answerIP);
             DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
             serverSocket.send(sendPacket);
-
         }
-        scanner.close();
-
-        // // Schedule tasks
-        scheduleRemoveInactiveRouters();
-
-        // Thread to recieve messages
-        // new Thread(new MessageReceiver(scanner, serverSocket, localIp, port)).start();
-
-        String senderIpAddress;
-
-        // Thread to send messages
-        Thread sendThread = new Thread(() -> {
-            // @SuppressWarnings("resource")
+    
+        // Thread to receive messages
+        new Thread(() -> {
+            System.out.println("Thread to receive messages started.");
             while (true) {
-                Scanner localScanner = new Scanner(System.in);
-                synchronized (routingTableLock) {
-                    for (Route route : routingTable) {
-                        System.out.println(route);
-                    }
-                }
-                System.out.print("Type your message: ");
-                String message = localScanner.nextLine();
-                System.out.print("Type the destiny's IP: ");
-                String routeDest = localScanner.nextLine();
-                localScanner.close();
+                byte[] receiveData = new byte[1024];
+                DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 try {
-                    sendMessage(message, serverSocket, myIP, routeDest);
+                    serverSocket.receive(receivePacket);
+    
+                    String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                    InetAddress IpAddress = receivePacket.getAddress();
+                    String senderIpAddress = IpAddress.getHostAddress();
+    
+                    // senderIpAddress is the IP address from who sent the message
+                    handleCommunication(receivedMessage.trim(), senderIpAddress, serverSocket);
                 } catch (IOException e) {
-                    System.out.println("Error sending message: " + e.getMessage());
+                    System.out.println("Error receiving packet: " + e.getMessage());
                 }
             }
-        });
-        sendThread.start();
-
+        }).start();
+    
         while (true) {
-            byte[] receiveData = new byte[1024];
-            DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-            serverSocket.receive(receivePacket);
-
-            String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
-            InetAddress IpAddress = receivePacket.getAddress();
-            senderIpAddress = IpAddress.getHostAddress();
-
-            // senderIpAddress is the IP address from who sent the message
-            handleCommunication(receivedMessage.trim(), senderIpAddress, serverSocket, myIP);
+            synchronized (routingTableLock) {
+                for (Route route : routingTable) {
+                    System.out.println(route);
+                }
+            }
+            System.out.print("Type your message: ");
+            String message = reader.readLine();
+            System.out.print("Type the destiny's IP: ");
+            String routeDest = reader.readLine();
+            System.out.println("Message: " + message + " sent to: " + routeDest);
+            try {
+                sendMessage(message, serverSocket, routeDest);
+            } catch (IOException e) {
+                System.out.println("Error sending message: " + e.getMessage());
+            }
         }
     }
 
-
-    private static void sendMessage(String message, DatagramSocket socket, String myIP, String routeDest) throws IOException {
+    
+    private static void sendMessage(String message, DatagramSocket socket, String routeDest) throws IOException {
         // &192.168.1.2%192.168.1.1%Oi tudo bem?
-        String messageToSend = "&" + myIP + "%" + routeDest + "%" + message;
-        byte[] sendData = messageToSend.getBytes();
+        StringBuilder messageToSend = new StringBuilder();
+        messageToSend.append("&");
+        messageToSend.append(myIP);
+        messageToSend.append("%");
+        messageToSend.append(routeDest);
+        messageToSend.append("%");
+        messageToSend.append(message);
+        byte[] sendData = messageToSend.toString().getBytes();
         InetAddress ipDestiny = InetAddress.getByName(routeDest);
 
         DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
@@ -145,7 +144,7 @@ class UDPServer {
     }
 
 
-    private static void handleCommunication(String message, String senderIpAddress, DatagramSocket socket, String myIP)
+    private static void handleCommunication(String message, String senderIpAddress, DatagramSocket socket)
             throws IOException {
 
         switch (message.charAt(0)) {
@@ -156,7 +155,7 @@ class UDPServer {
                 addIPToRoutingTable(message, senderIpAddress, socket);
                 break;
             case '&':
-                recieveMessage(message, socket, myIP);
+                recieveMessage(message, socket);
                 break;
 
             default:
@@ -176,6 +175,12 @@ class UDPServer {
                 System.out.println(s);
                 String[] parts = s.split(":");
                 String ip = parts[0];
+
+                // If the IP is the same as my own IP, it will not be added to the routing table
+                if (ip.equals(myIP)) {
+                    continue;
+                }
+                
                 String metric = parts[1];
 
                 int metricInt = Integer.parseInt(metric) + 1;
@@ -216,7 +221,8 @@ class UDPServer {
 
         // confirm if the message is real or not, the message send an IP (ex.:
         // @192.168.1.1) and the address has it's IP
-        if (ip.equals(senderIpAddress)) {
+
+        if (ip.equals(senderIpAddress) && !(ip.equals(myIP))) {
             Route newRoute = new Route(ip, 1, senderIpAddress);
             routingTable.add(newRoute);
 
@@ -229,21 +235,30 @@ class UDPServer {
     }
 
 
-    private static void sendRoutingTable(DatagramSocket socket, String myIP) throws IOException {
+    private static void sendRoutingTable(DatagramSocket socket) throws IOException {
         // (String nickname, String message, InetAddress senderAddress, int senderPort,
         // DatagramSocket socket) throws IOException {
         // It will (re)create the message with the routing table to send
         synchronized (routingTableLock) {
 
-            String messageToSend = "!" + myIP + "1";
+
+            StringBuilder messageToSend = new StringBuilder();
+            messageToSend.append("!");
+            messageToSend.append(myIP);
+            messageToSend.append(":1");
+
+
             for (Route route : routingTable) {
-                messageToSend += "!" + route.getIpDestiny() + ":" + route.getMetric();
+                messageToSend.append("!");
+                messageToSend.append(route.getIpDestiny());
+                messageToSend.append(":");
+                messageToSend.append(route.getIpOut());
             }
 
             // It will send the message only to the neighboors routers
             for (Route route : routingTable) {
                 if (route.getMetric() == 1) {
-                    byte[] sendData = messageToSend.getBytes();
+                    byte[] sendData = messageToSend.toString().getBytes();
                     InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
                     DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
                     socket.send(sendPacket);
@@ -260,7 +275,7 @@ class UDPServer {
     }
 
 
-    private static void recieveMessage(String message, DatagramSocket socket, String myIP) throws IOException {
+    private static void recieveMessage(String message, DatagramSocket socket) throws IOException {
         // &192.168.1.2%192.168.1.1%Oi tudo bem?
         // The first address is the source IP, the second is the destination IP and then
         // the text message comes.
@@ -271,26 +286,29 @@ class UDPServer {
         String ipDestiny = parts[0];
 
         if (parts[1].equals(myIP)) {
+            System.out.println(parts[1] + " sent: ");
             System.out.println(parts[2]);
             return;
         }
 
         boolean found = false;
+        String ipToSendForward = "";
 
         for (Route route : routingTable) {  // iterate the existing routing table
             if (route.getIpDestiny().equals(ipDestiny)) {
                 found = true;
-                String sendTo = route.getIpOut();  // get the ip out to know to who it needs to repass the message
+                ipToSendForward = route.getIpOut();  // get the ip out to know to who it needs to repass the message
 
                 byte[] sendData = message.getBytes();
-                InetAddress IpOut = InetAddress.getByName(sendTo);
+                InetAddress IpOut = InetAddress.getByName(ipToSendForward);
                 DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IpOut, DEST_PORT);
                 socket.send(sendPacket);
                 break;
             }
         }
         if (found) {
-            System.out.println("Message recieved and sent: " + message);
+            System.out.println("Message recieved and forwarded: " + message);
+            System.out.println("Message recieved: " +  message + " and forwarded to: " + ipDestiny + " by: " + ipToSendForward);
         } else {
             System.out.println("Route not found!");
         }
@@ -311,11 +329,11 @@ class UDPServer {
     }
 
 
-    private static void addRoutesTask(DatagramSocket socket, String myIP) {
+    private static void addRoutesTask(DatagramSocket socket) {
         // Add a new task to send the routing table for the new route
         ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> {
             try {
-                sendRoutingTable(socket, myIP);
+                sendRoutingTable(socket);
             } catch (IOException e) {
                 System.out.println("Error sending routing table: " + e.getMessage());
             }
