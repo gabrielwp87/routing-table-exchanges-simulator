@@ -31,7 +31,8 @@ class UDPServer {
         InetAddress localIp = InetAddress.getLocalHost();
     
         // convert IP address to string
-        myIP = localIp.getHostAddress();
+        // myIP = localIp.getHostAddress();
+        myIP = "10.32.162.223";
     
         DatagramSocket serverSocket = new DatagramSocket(DEST_PORT);
     
@@ -84,11 +85,11 @@ class UDPServer {
                 DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                 try {
                     serverSocket.receive(receivePacket);
-    
                     String receivedMessage = new String(receivePacket.getData(), 0, receivePacket.getLength());
                     InetAddress IpAddress = receivePacket.getAddress();
                     String senderIpAddress = IpAddress.getHostAddress();
-    
+                    
+                    System.out.println(receivedMessage + " from: " + senderIpAddress);
                     // senderIpAddress is the IP address from who sent the message
                     handleCommunication(receivedMessage.trim(), senderIpAddress, serverSocket);
                 } catch (IOException e) {
@@ -97,7 +98,10 @@ class UDPServer {
             }
         }).start();
     
+        scheduleRemoveInactiveRouters();
+        
         while (true) {
+            
             synchronized (routingTableLock) {
                 for (Route route : routingTable) {
                     System.out.println(route);
@@ -110,6 +114,7 @@ class UDPServer {
             System.out.println("Message: " + message + " sent to: " + routeDest);
             try {
                 sendMessage(message, serverSocket, routeDest);
+                System.out.println(message + " to: " + routeDest + "+++++++++++++++++++++++++++++");
             } catch (IOException e) {
                 System.out.println("Error sending message: " + e.getMessage());
             }
@@ -188,6 +193,8 @@ class UDPServer {
                 boolean found = false;
 
                 String newIpOut = senderIpAddress;
+                Route senderRoute = new Route(senderIpAddress, 1, senderIpAddress);
+                routingTable.add(senderRoute);
 
                 for (Route route : routingTable) { // iterate the existing routing table
                     if (route.getIpDestiny().equals(ip)) { // find if the ip is already in the routing table
@@ -217,21 +224,16 @@ class UDPServer {
 
     private static void addIPToRoutingTable(String message, String senderIpAddress, DatagramSocket socket) {
         // case message starts with '@'
-        String ip = message.substring(1);
 
         // confirm if the message is real or not, the message send an IP (ex.:
         // @192.168.1.1) and the address has it's IP
 
-        if (ip.equals(senderIpAddress) && !(ip.equals(myIP))) {
-            Route newRoute = new Route(ip, 1, senderIpAddress);
+            Route newRoute = new Route(senderIpAddress, 1, senderIpAddress);
             routingTable.add(newRoute);
 
-            System.out.println("New route added: " + message);
+            System.out.println("New route added: " + senderIpAddress);
             System.out.println(newRoute.getIpDestiny() + " " + newRoute.getMetric() + " " + newRoute.getIpOut());
 
-        } else {
-            System.out.println("IP is different from ip source, addicion to routing table not accepted!");
-        }
     }
 
 
@@ -243,16 +245,15 @@ class UDPServer {
 
 
             StringBuilder messageToSend = new StringBuilder();
-            messageToSend.append("!");
-            messageToSend.append(myIP);
-            messageToSend.append(":1");
-
 
             for (Route route : routingTable) {
-                messageToSend.append("!");
-                messageToSend.append(route.getIpDestiny());
-                messageToSend.append(":");
-                messageToSend.append(route.getIpOut());
+                if (!route.getIpDestiny().equals(myIP)) {
+                    messageToSend.append("!");
+                    messageToSend.append(route.getIpDestiny());
+                    messageToSend.append(":");
+                    messageToSend.append(route.getMetric());
+                    
+                }
             }
 
             // It will send the message only to the neighboors routers
@@ -262,6 +263,7 @@ class UDPServer {
                     InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
                     DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
                     socket.send(sendPacket);
+                    System.out.println(messageToSend.toString() + " para: " + ipDestiny + "=======================================");
                 }
 
             }
