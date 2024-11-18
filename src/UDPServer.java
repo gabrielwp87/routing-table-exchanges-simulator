@@ -42,7 +42,7 @@ class UDPServer {
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(3);
 
-        // Agendamento de tarefas periódicas
+        // Agendamento de tarefas
         scheduler.scheduleAtFixedRate(() -> sendRoutingTable(serverSocket), 0, TIME_SEND, TimeUnit.MILLISECONDS);
         scheduler.scheduleAtFixedRate(UDPServer::removeInactiveRoutes, 0, TIME_REMOVE, TimeUnit.MILLISECONDS);
 
@@ -79,18 +79,18 @@ class UDPServer {
 
         byte[] sendData = message.getBytes();
 
-        routingTable.values().stream()
-        .filter(route -> route.getMetric() == 1)
-        .forEach(route -> {
-            try {
-                InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
-                DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
-                socket.send(packet);
-                System.out.println("@ enviado: " + route.getIpDestiny());
-            } catch (IOException e) {
-                System.out.println("Erro ao enviar tabela: " + e.getMessage());
+        for (Route route : routingTable.values()) {
+            if (route.getMetric() == 1) {
+                try {
+                    InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
+                    DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
+                    socket.send(packet);
+                    System.out.println("@ enviado: " + route.getIpDestiny());
+                } catch (IOException e) {
+                    System.out.println("Erro ao enviar tabela: " + e.getMessage());
+                }
             }
-        });
+        }
 
     }
 
@@ -126,24 +126,25 @@ class UDPServer {
         String message = messageBuilder.toString();
         byte[] sendData = message.getBytes();
 
-        routingTable.values().stream()
-                .filter(route -> route.getMetric() == 1)
-                .forEach(route -> {
-                    try {
-                        InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
-                        DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
-                        socket.send(packet);
-                        System.out.println("Tabela enviada para: " + route.getIpDestiny());
-                    } catch (IOException e) {
-                        System.out.println("Erro ao enviar tabela: " + e.getMessage());
-                    }
-                });
+        for (Route route : routingTable.values()) {
+            if (route.getMetric() == 1) {
+                try {
+                    InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
+                    DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, DEST_PORT);
+                    socket.send(packet);
+                    System.out.println("Tabela enviada para: " + route.getIpDestiny());
+                } catch (IOException e) {
+                    System.out.println("Erro ao enviar tabela: " + e.getMessage());
+                }
+            }
+        }
     }
 
     private static void removeInactiveRoutes() {
         long currentTime = System.currentTimeMillis();
         routingTableLock.lock();
         try {
+            
             routingTable.entrySet().removeIf(entry -> (currentTime - entry.getValue().getLastSeen()) > TIME_REMOVE);
             System.out.println("Rotas inativas removidas!");
         } finally {
@@ -168,7 +169,7 @@ class UDPServer {
     private static void handleCommunication(String message, String senderIP, DatagramSocket socket) throws IOException {
         System.out.println("Mensagem recebida de " + senderIP + ": " + message);
         if (message.startsWith("!")) {
-            registerInRoutingTable(message, senderIP);
+            registerInRoutingTable(message, senderIP, socket);
         } else if (message.startsWith("@")) {
             addIPToRoutingTable(senderIP);
         } else if (message.startsWith("&")) {
@@ -178,8 +179,10 @@ class UDPServer {
         }
     }
 
-    private static void registerInRoutingTable(String message, String senderIP) {
+    private static void registerInRoutingTable(String message, String senderIP, DatagramSocket socket) {
         String[] entries = message.split("!");
+        boolean updated = false;
+
         routingTableLock.lock();
         routingTable.get(senderIP).updateTimestamp();
         routingTableLock.unlock();
@@ -194,18 +197,20 @@ class UDPServer {
 
             routingTableLock.lock();
             try {
-                routingTable.compute(ip, (key, route) -> {
-                    if (route == null || metric < route.getMetric()) {
-                        return new Route(ip, metric, senderIP);
-                    } else if (1 == route.getMetric()) {
-                        return route;
-                    }
+                Route route = routingTable.get(ip);
+                if (route == null || metric < route.getMetric()) {
+                    updated = true;
+                    routingTable.put(ip, new Route(ip, metric, senderIP));
+                } else if (1 != route.getMetric()) {
                     route.updateTimestamp();
-                    return route;
-                });
+                }
             } finally {
                 routingTableLock.unlock();
             }
+        }
+
+        if (updated) {
+            sendRoutingTable(socket);
         }
     }
 
