@@ -73,7 +73,7 @@ class UDPServer {
     }
 
     public static void handleCommunication(String message, String senderIP, DatagramSocket socket) throws IOException {
-        System.out.println("Mensagem recebida de " + senderIP + ": " + message);
+        System.out.println("Mensagem recebida de " + senderIP + " : " + message);
         if (message.startsWith("!")) {
             RoutingTable.registerInRoutingTable(message, senderIP, socket);
         } else if (message.startsWith("@")) {

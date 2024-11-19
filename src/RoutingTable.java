@@ -92,6 +92,8 @@ public class RoutingTable {
     }
 
     public static void addIPToRoutingTable(String senderIP) {
+        routingTableLock.lock();
         UDPServer.routingTable.put(senderIP, new Route(senderIP, 1, senderIP));
+        routingTableLock.unlock();
     }
 }

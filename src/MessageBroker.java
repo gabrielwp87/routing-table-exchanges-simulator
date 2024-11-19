@@ -11,18 +11,21 @@ public class MessageBroker {
 
     public static void sendInitialMessage(DatagramSocket socket, String myIP) throws IOException {
         String message = "@" + myIP;
+
         byte[] sendData = message.getBytes();
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        System.out.println("Digite o IP destino: ");
-        String answerIP = reader.readLine().trim();
-
-        InetAddress ipDestiny = InetAddress.getByName(answerIP);
-        DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, UDPServer.DEST_PORT);
-        socket.send(packet);
-        System.out.println("@ enviado para: " + answerIP);
-
-
+        UDPServer.routingTable.values().stream()
+                .filter(route -> route.getMetric() == 1)
+                .forEach(route -> {
+                    try {
+                        InetAddress ipDestiny = InetAddress.getByName(route.getIpDestiny());
+                        DatagramPacket packet = new DatagramPacket(sendData, sendData.length, ipDestiny, UDPServer.DEST_PORT);
+                        socket.send(packet);
+                        System.out.println("@ enviado: " + route.getIpDestiny());
+                    } catch (IOException e) {
+                        System.out.println("Erro ao enviar tabela: " + e.getMessage());
+                    }
+                });
     }
 
     public static void receiveMessages(DatagramSocket socket) {
