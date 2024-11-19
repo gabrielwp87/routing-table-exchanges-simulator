@@ -2,6 +2,9 @@
 
 ## Projeto: Simulador de Troca de Tabelas de Roteamento e Envio de Mensagens
 
+### Autores
+Gabriel Piazenski, Gustavo Willian Martins da Silva e Lorenzo More
+
 ### Descrição
 Este projeto implementa um simulador que troca tabelas de roteamento e permite o envio de mensagens de texto entre roteadores, utilizando sockets UDP. A aplicação suporta:
 - Troca de tabelas de roteamento a cada 15 segundos.
@@ -12,24 +15,6 @@ O projeto foi desenvolvido seguindo as especificações descritas no trabalho fi
 
 ---
 
-### Como Rodar
-
-1. **Compile os arquivos Java:**
-   ```bash
-   javac UDPServer.java Route.java
-   ```
-
-2. **Execute os roteadores:**
-   Cada roteador requer um IP local e um arquivo de configuração. Exemplos:
-   ```bash
-   java UDPServer 127.0.0.1 configs/R1.txt
-   java UDPServer 127.0.0.2 configs/R2.txt
-   java UDPServer 127.0.0.3 configs/R3.txt
-   ```
-
-   > **Nota:** Os arquivos de configuração devem conter os IPs dos vizinhos do roteador, com um IP por linha.
-
----
 
 ### Protocolo de Comunicação
 
@@ -73,5 +58,3 @@ A aplicação utiliza dois tipos de mensagens:
 
 ---
 
-### Autor(es)
-Gustavo Willian Martins da Silva, Gabriel Wagner e Lorenzo More
