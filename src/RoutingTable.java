@@ -69,6 +69,9 @@ public class RoutingTable {
             String ip = parts[0];
             int metric = Integer.parseInt(parts[1]) + 1;
 
+            if(ip.equals(UDPServer.myIP))
+                continue;
+
             routingTableLock.lock();
             try {
                 Route route = UDPServer.routingTable.get(ip);

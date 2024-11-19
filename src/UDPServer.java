@@ -17,8 +17,8 @@ class UDPServer {
         InetAddress localIp = InetAddress.getLocalHost();
 
         // convert IP address to string
-        myIP = localIp.getHostAddress();
-//            myIP = "10.32.162.223";
+//        myIP = localIp.getHostAddress();
+            myIP = "10.132.249.44";
 
         if (args.length == 2) {
             myIP = args[0];
