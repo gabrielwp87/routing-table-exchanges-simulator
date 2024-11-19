@@ -1,5 +1,5 @@
 public class Route {
-    private String ipDestiny;
+    private final String ipDestiny;
     private int metric;
     private String ipOut;
     private long lastSeen;
